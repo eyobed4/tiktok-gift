@@ -5,18 +5,6 @@ from flask_cors import CORS
 import os
 from datetime import datetime
 
-@app.route('/')
-def welcome():
-    return render_template('welcome.html')
-
-@app.route('/payloads')
-def payloads():
-    return render_template('payloads.html')
-
-@app.route('/listeners')
-def listeners():
-    return render_template('listeners.html')
-
 
 
 app = Flask(__name__)
@@ -26,14 +14,9 @@ app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
 app.route('/')
 def welcome():
-    return render_template('welcome.html')
-
-app.route('/payloads')
-def payloads():
-    return render_template('payloads.html')
-
-app.route('/tiktok')
-def listeners():
+    return render_template('tiktok.html')
+app.route('tiktok')
+def tiktok():
     return render_template('tiktok.html')
 
 db = SQLAlchemy(app)
