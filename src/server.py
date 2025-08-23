@@ -1,14 +1,40 @@
-from flask import Flask, request, jsonify
+from flask import Flask, request, jsonify, render_template, redirect, url_for
 from flask_sqlalchemy import SQLAlchemy
 from flask_bcrypt import Bcrypt
 from flask_cors import CORS
 import os
 from datetime import datetime
 
+@app.route('/')
+def welcome():
+    return render_template('welcome.html')
+
+@app.route('/payloads')
+def payloads():
+    return render_template('payloads.html')
+
+@app.route('/listeners')
+def listeners():
+    return render_template('listeners.html')
+
+
+
 app = Flask(__name__)
 app.config['SECRET_KEY'] = 'your-secret-key-here'
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///database.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+
+app.route('/')
+def welcome():
+    return render_template('welcome.html')
+
+app.route('/payloads')
+def payloads():
+    return render_template('payloads.html')
+
+app.route('/tiktok')
+def listeners():
+    return render_template('tiktok.html')
 
 db = SQLAlchemy(app)
 bcrypt = Bcrypt(app)
